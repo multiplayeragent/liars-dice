@@ -1,0 +1,21 @@
+{
+  "name": "Liar's Dice",
+  "genre": "board",
+  "dim": "3D",
+  "mode": "Turn-based",
+  "players": "2–6",
+  "hook": "Bluff about dice nobody else can see.",
+  "how": "Everyone rolls dice under a cup and only sees their own. Take turns raising the bid on how many of one face are on the whole table (ones are wild), or call liar: whoever was wrong loses a die, and the last player with dice wins.",
+  "controls": "Click or tap to set a bid and press Bid or Liar; keys 2–6, up/down, Enter, L",
+  "uses": [
+    ["Hidden info", "Your dice are sealed so only you can see them (the host rolls, so it can too)."],
+    ["Host-run rules", "The host's browser rolls, checks every bid and counts the dice; if it leaves, the next player takes over."],
+    ["Bots", "Bots fill empty seats, bluff and call liar, and take over for anyone who leaves."],
+    ["Leaderboard", "Games won, shown after every game."]
+  ],
+  "ideas": [
+    "Add a 'spot on' call that wins a die back",
+    "Make it a pirate ship deck at night",
+    "Start everyone with three dice for quick games"
+  ]
+}

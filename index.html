@@ -1,0 +1,868 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Liar's Dice</title>
+<style>
+  :root { --gold: #ffcf5a; --red: #ff5a52; --ink: #fbf3e4; --panel: #1a120ce8; }
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #130c08; }
+  body { font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); user-select: none; -webkit-user-select: none; }
+  canvas { display: block; touch-action: none; }
+  [hidden] { display: none !important; }
+  #status { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 0; right: 0; text-align: center; font-weight: 900; font-size: clamp(17px, 3.2vw, 24px);
+            text-shadow: 0 2px 8px #000d; pointer-events: none; padding: 0 12px; }
+  #status img, #panel img, .hist img { width: 1.05em; height: 1.05em; vertical-align: -0.18em; border-radius: 3px; }
+  #sub { position: fixed; top: calc(max(12px, env(safe-area-inset-top)) + 34px); left: 0; right: 0; text-align: center; font-size: 14px; color: #f2dfc2; text-shadow: 0 1px 5px #000d; pointer-events: none; padding: 0 16px; }
+  .hist { position: fixed; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); font-size: 13px; color: #e8d6bb; display: flex; flex-direction: column; gap: 2px; pointer-events: none; text-shadow: 0 1px 4px #000c; }
+  .hist div:last-child { color: #fff; font-weight: 700; }
+  #panel { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); width: min(560px, calc(100vw - 20px)); box-sizing: border-box;
+           display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 18px; background: var(--panel); border: 1px solid #ffffff22; box-shadow: 0 12px 40px #000a; }
+  #panel .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+  #panel .grp { display: flex; gap: 8px; align-items: center; }
+  #panel button { min-height: 46px; min-width: 46px; border: 0; border-radius: 12px; background: #ffffff1c; color: #fff; font: 800 18px system-ui, sans-serif; cursor: pointer; touch-action: manipulation; }
+  #panel button:disabled { opacity: .3; cursor: default; }
+  #count { min-width: 44px; text-align: center; font-weight: 900; font-size: 26px; }
+  #faces { display: flex; gap: 6px; }
+  #faces button { padding: 4px; background: #ffffff10; }
+  #faces button img { width: 36px; height: 36px; display: block; border-radius: 7px; }
+  #faces button.on { background: var(--gold); }
+  #bidBtn { flex: 1; background: var(--gold) !important; color: #2b1a00 !important; font-size: 17px !important; }
+  #liarBtn { flex: 1; background: var(--red) !important; font-size: 19px !important; letter-spacing: .04em; }
+  #net { position: fixed; top: calc(max(10px, env(safe-area-inset-top)) + 42px); right: max(12px, env(safe-area-inset-right)); font-size: 12px; opacity: .7; pointer-events: none; text-align: right; max-width: 45vw; }
+  #name { position: fixed; top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); width: 120px; height: 36px; border-radius: 10px; border: 1px solid #ffffff33;
+          background: #0006; color: #fff; padding: 0 10px; font: inherit; font-size: 16px; }
+  #fx { position: fixed; inset: 0; pointer-events: none; z-index: 30; }
+  #over { position: fixed; inset: 0; display: grid; place-items: center; background: #0009; z-index: 20; }
+  .card { width: min(380px, calc(100vw - 32px)); max-height: 90vh; overflow: auto; box-sizing: border-box; padding: 20px; border-radius: 18px; background: #24170f; border: 1px solid #ffffff22; text-align: center; box-shadow: 0 20px 60px #000a; }
+  .card h2 { margin: 0; font-size: 28px; } .card p { margin: 4px 0 12px; color: #d9c4a3; }
+  .card h3 { margin: 6px 0 4px; font-size: 13px; color: var(--gold); text-align: left; }
+  .card ol { text-align: left; margin: 0 0 14px; padding-left: 24px; font-size: 14px; min-height: 30px; } .card li span { float: right; }
+  .card button { width: 100%; min-height: 48px; border-radius: 12px; border: 0; font: 800 16px system-ui, sans-serif; cursor: pointer; background: var(--gold); color: #2b1a00; }
+  #oNext { color: #d9c4a3; font-size: 13px; margin-top: 8px; }
+  @media (max-width: 560px) { #faces button img { width: 30px; height: 30px; } .hist { display: none; } #name { width: 96px; } #sub { top: calc(max(12px, env(safe-area-inset-top)) + 84px); } #status { padding-right: 112px; text-align: left; } }
+</style>
+<script src="https://cdn.multiplayeragent.com/sdk/mp.global.js"></script>
+<script type="importmap">{ "imports": { "three": "./libs/three.module.min.js" } }</script>
+</head>
+<body>
+<div id="status">Connecting…</div>
+<div id="sub"></div>
+<div class="hist" id="hist"></div>
+<input id="name" maxlength="14" placeholder="Your name" aria-label="Your name">
+<div id="panel" hidden>
+  <div class="row"><div class="grp"><button id="minus" aria-label="Fewer">−</button><div id="count">1</div><button id="plus" aria-label="More">+</button></div><div id="faces"></div></div>
+  <div class="row"><button id="bidBtn">Bid</button><button id="liarBtn">Liar!</button></div>
+</div>
+<div id="net">Connecting…</div>
+<canvas id="fx"></canvas>
+<div id="over" hidden><div class="card">
+  <h2 id="oTitle"></h2><p id="oSub"></p>
+  <h3>Most wins</h3><ol id="board"><li>Loading…</li></ol>
+  <button id="again">Play again</button><div id="oNext"></div>
+</div></div>
+<script type="module">
+/* ═══ LIAR'S DICE · a Multiplayer Agent starter ═══════════════════════════════════════════
+ * Bluff about dice nobody else can see. Turn-based, 2–6 players; bots fill empty seats.
+ *
+ * WHERE THINGS ARE (search for the "── " headers):
+ *   CONFIG ........ seats, dice, timers, how the bots bluff, colors
+ *   CONNECTION .... MP_CONNECT, joining, the offline room, who is host
+ *   SEALED CUPS ... the Seal helper: your dice are encrypted so only you can see them
+ *   RULES ......... what counts toward a bid, what a legal raise is, the odds (for bots)
+ *   TABLE (HOST) .. seats, rolling, bids, "liar" calls, losing dice, bots, the turn timer,
+ *                   and taking over as a new host. Only the host writes the shared fields.
+ *   MY CUP ........ reading my sealed dice, bidding, calling liar, re-sending to a new host
+ *   SCENE ......... renderer, the lamp over the table, the tavern table and floor
+ *   DICE & CUPS ... dice and cup models, each seat's cup, dice, name tag and speech bubble
+ *   HUD & RESULTS . the status line, the bid panel, the results card, leaderboard, sounds
+ *   INPUT / LOOP .. buttons, keys, the camera, the main loop
+ *
+ * HOW THE MULTIPLAYER WORKS (a relay room: no server code):
+ *   - The table lives in shared fields only the HOST writes: `game` (one JSON field: id, v,
+ *     phase, seats, dice left per seat, round, turn, the current bid, recent bids, the last
+ *     "liar" call, every die once revealed, timers, the winner) and `cups` (each human's
+ *     dice this round, SEALED to that player, so only they can see them; the host rolls, so
+ *     it can too).
+ *   - The HOST is the lowest sessionId among live players (heartbeat seen in the last 3s).
+ *     It holds every die in its own memory and only reveals them when someone calls liar.
+ *   - Each player writes its OWN entity: `n` (name), `c` (color), `pk` (public key), `hb`.
+ *   - Intents to the host: "bid" {g, t, c, f}, "liar" {g, t}, "again" {g}. `t` counts every
+ *     action, so an old or double intent is ignored.
+ *   - When the host changes, every player re-sends its own dice sealed to the new host
+ *     ("mydice"). The bots' dice were only in the old host's memory, so they are re-rolled.
+ *   - Timers are timestamps: endsAt (the roll and the reveal), turnEnds (then the host bids
+ *     for you).
+ *   - ?attract plays offline with bots only (the preview video is recorded from it).
+ *   - Leaderboard "wins": +1 for each game a player wins, shown on the results card.
+ */
+import * as THREE from "three";
+
+// ── CONFIG ──────────────────────────────────────────────────────────────────────────
+const CONFIG = {
+  seats: 4,               // bots fill the table up to this many players (2 to 6)
+  maxSeats: 6,            // more people than this watch until a seat frees up
+  dice: 5,                // dice each player starts with
+  wildOnes: true,         // ones count as every face (so nobody bids on ones)
+  rollMs: 1600,           // the cups rattle this long at the start of a round
+  turnMs: 30000,          // time to bid before the host bids for you
+  revealMs: 5500,         // the cups stay up this long after a "liar" call
+  overMs: 15000,          // the results card shows this long, then a new game starts
+  botMs: [1300, 2800],    // how long a bot thinks
+  botDoubt: 0.32,         // a bot calls liar when it thinks the bid is less likely than this
+  botBluff: 0.15,         // chance a bot bids for show instead of for odds
+  seatGraceMs: 8000,      // a player silent this long hands its seat (and dice) to a bot
+  rejoinMs: 3000,         // a new host waits this long for players to re-send their dice
+  board: "wins",          // leaderboard name
+  felt: "#1d5741", wood: "#5c3520", leather: "#7b4a2b", room: "#130c08",
+};
+const BOT_NAMES = ["Old Salt", "Mags", "Barnaby", "One-Eye", "Rosie", "Captain Pip"];
+const COLORS = ["#ff6b5e", "#4dabf7", "#ffd43b", "#69db7c", "#c08cff", "#ff9f43", "#f783ac", "#3bc9db"];
+const NAME_A = ["Lucky", "Sly", "Bold", "Shifty", "Jolly", "Salty"], NAME_B = ["Gull", "Fox", "Otter", "Crab", "Parrot", "Eel"];
+const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+
+// ── CONNECTION ──────────────────────────────────────────────────────────────────────
+// The builder fills these in for this game. Downloaded from GitHub? Put your own pk_ key here.
+const MP_CONNECT = {
+  key: 'pk_REPLACE_ME',
+  room: 'liars-dice',
+  endpoint: 'wss://live.multiplayeragent.com',
+  apiUrl: 'https://api.multiplayeragent.com',
+};
+const ATTRACT = new URLSearchParams(location.search).has("attract");
+
+/** Same shape as the SDK client, kept in this tab: offline play and ?attract. */
+function localRoom() {
+  const id = "local", state = { entities: { players: { [id]: {} } }, shared: {} }, subs = [];
+  let queued = false;
+  const emit = () => { if (!queued) { queued = true; queueMicrotask(() => { queued = false; subs.forEach((f) => f(state)); }); } };
+  const put = (o, k, v) => { if (typeof k === "object") Object.assign(o, k); else o[k] = v; emit(); };
+  return {
+    sessionId: id, state, offline: true,
+    me: { set: (k, v) => put(state.entities.players[id], k, v) },
+    setShared: (k, v) => put(state.shared, k, v),
+    onState: (f) => { subs.push(f); f(state); }, onJoin() {}, onLeave() {}, on() {}, send() {},
+    onDisconnect() {}, onReconnect() {}, leave: async () => {},
+  };
+}
+async function connect() {
+  if (ATTRACT || typeof MP === "undefined") return localRoom();
+  try {
+    const mp = await Promise.race([MP.join({ ...MP_CONNECT }), new Promise((_, no) => setTimeout(() => no(new Error("timed out")), 10000))]);
+    window.mp = mp; // the builder calls window.mp.leave() when the page closes
+    return mp;
+  } catch (e) {
+    console.warn("Playing offline:", e && e.message);
+    return localRoom();
+  }
+}
+const parse = (v, fb) => { if (typeof v !== "string") return fb; try { return JSON.parse(v); } catch { return fb; } };
+let net = null, S = { entities: { players: {} }, shared: {} };
+const seenHb = new Map();
+/** Players whose heartbeat moved in the last 3s (plus us), sorted by sessionId. */
+function livePlayers() {
+  const now = performance.now(), out = [];
+  for (const [id, p] of Object.entries(S.entities.players || {})) {
+    const s = seenHb.get(id);
+    if (!s || s.hb !== p.hb) seenHb.set(id, { hb: p.hb, at: now });
+    if (id === net.sessionId || now - seenHb.get(id).at < 3000) out.push(id);
+  }
+  return out.sort();
+}
+const isHost = () => livePlayers()[0] === net.sessionId;
+const humans = () => livePlayers().filter((id) => !(ATTRACT && id === net.sessionId));
+/** Still in the room and heard from within the seat grace time. */
+const stillHere = (id) => id === net.sessionId || (!!S.entities.players[id] && performance.now() - (seenHb.get(id)?.at ?? -1e9) < CONFIG.seatGraceMs);
+const playerName = (id) => (id === net.sessionId ? myName : String(S.entities.players[id]?.n || "Player")).slice(0, 14);
+const playerColor = (id) => (id === net.sessionId ? myColor : S.entities.players[id]?.c || "#ccc");
+const pkOf = (id) => (id === net.sessionId ? Seal.pub : S.entities.players[id]?.pk);
+
+// ── SEALED CUPS ─────────────────────────────────────────────────────────────────────
+// Everything in room state reaches every client, so your dice are written SEALED: encrypted so
+// only you can open them. Each player publishes a public key in its own entity (`pk`); the host
+// seals each player's dice to that key and writes the boxes into the shared `cups` field.
+//   - The host rolls, so the host can see every die. Fine for friends, not cheat-proof.
+//   - A new host can't open boxes the old host sealed, so every player re-sends its own dice
+//     to the new host (sealed, with mp.send).
+//   - crypto.subtle needs https or localhost. Offline you are the host and there is nobody to
+//     hide from, so seal()/open() pass the value through.
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const Seal = {
+  pair: null,
+  pub: "",
+  keys: new Map(), // other player's public key -> derived AES key
+  get on() { return !!(window.crypto && crypto.subtle); },
+  /** Make this player's key pair. Returns the public key to publish: me.set("pk", pub). */
+  async init() {
+    if (!this.on) return "";
+    this.pair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, false, ["deriveKey"]);
+    this.pub = b64(await crypto.subtle.exportKey("raw", this.pair.publicKey));
+    return this.pub;
+  },
+  async key(otherPub) {
+    let k = this.keys.get(otherPub);
+    if (!k) {
+      const theirs = await crypto.subtle.importKey("raw", unb64(otherPub), { name: "ECDH", namedCurve: "P-256" }, false, []);
+      k = await crypto.subtle.deriveKey({ name: "ECDH", public: theirs }, this.pair.privateKey, { name: "AES-GCM", length: 128 }, false, ["encrypt", "decrypt"]);
+      this.keys.set(otherPub, k);
+    }
+    return k;
+  },
+  /** Seal any JSON value so only the holder of `toPub` (and you) can open it. */
+  async seal(toPub, value) {
+    if (!this.on || !toPub || !this.pair) return "p:" + JSON.stringify(value);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await this.key(toPub), new TextEncoder().encode(JSON.stringify(value)));
+    return b64(iv) + "." + b64(ct);
+  },
+  /** Open a box sealed by the player whose public key is `fromPub`. Null if it isn't for you. */
+  async open(fromPub, box) {
+    if (typeof box !== "string") return null;
+    if (box.startsWith("p:")) return JSON.parse(box.slice(2));
+    if (!this.on || !fromPub || !this.pair) return null;
+    try {
+      const [iv, ct] = box.split(".").map(unb64);
+      const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, await this.key(fromPub), ct);
+      return JSON.parse(new TextDecoder().decode(pt));
+    } catch { return null; }
+  },
+};
+
+// ── RULES ───────────────────────────────────────────────────────────────────────────
+// A bid {c, f} says: "on the whole table there are at least c dice showing f" (ones count as any face).
+const minFace = () => (CONFIG.wildOnes ? 2 : 1);
+const counts = (d, f) => d === f || (CONFIG.wildOnes && d === 1);
+const roll = () => 1 + Math.floor(Math.random() * 6);
+/** A raise needs more dice, or the same number of a higher face. */
+const beats = (bid, c, f) => !bid || c > bid.c || (c === bid.c && f > bid.f);
+const total = (g) => g.dice.reduce((a, b) => a + b, 0);
+/** Chance that at least k of n hidden dice show the face (each counts with probability p). */
+function atLeast(n, p, k) {
+  if (k <= 0) return 1;
+  if (k > n) return 0;
+  let sum = 0, c = 1;
+  for (let i = 0; i <= n; i++) { if (i >= k) sum += c * p ** i * (1 - p) ** (n - i); c = (c * (n - i)) / (i + 1); }
+  return sum;
+}
+const faceWord = (c, f) => `${WORDS[c] || c} ${f}${c === 1 ? "" : "s"}`;
+
+// ── TABLE (HOST) ────────────────────────────────────────────────────────────────────
+// The host's private memory: every die this round (`dice[seat]`), the boxes, intents in line.
+const host = { last: null, ready: false, since: 0, busy: false, dice: [], r: -1, boxes: {}, think: null, inbox: [], known: new Map() };
+const gameMemo = { raw: undefined, g: null };
+/** The game as state has it, or the host's own newer write that hasn't come back yet. */
+function game() {
+  if (gameMemo.raw !== S.shared.game) { gameMemo.raw = S.shared.game; gameMemo.g = parse(S.shared.game, null); }
+  const g = gameMemo.g;
+  return host.last && isHost() && (!g || host.last.v > g.v) ? host.last : g;
+}
+function writeGame(g) { g = { ...g, v: (game()?.v ?? 0) + 1 }; host.last = g; net.setShared("game", JSON.stringify(g)); return g; }
+const seatOf = (g, id) => (g ? g.seats.findIndex((s) => s.i === id) : -1);
+const canSit = (id) => net.offline || !Seal.on || (id === net.sessionId ? !!Seal.pub : !!S.entities.players[id]?.pk);
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const rnd = (a, b) => a + Math.random() * (b - a);
+/** The next seat after `s` that still has dice. */
+const nextIn = (g, s, dice = g.dice) => { for (let k = 1; k <= g.seats.length; k++) { const i = (s + k) % g.seats.length; if (dice[i] > 0) return i; } return s; };
+
+/** Seal the listed seats' dice to their owners into `cups`, then write the game. */
+async function commit(g, sealSeats = []) {
+  for (const i of new Set(sealSeats)) {
+    const s = g.seats[i];
+    if (!s || s.b || !host.dice[i] || (!pkOf(s.i) && Seal.on && !net.offline)) continue; // never write dice in the clear
+    host.boxes[s.i] = await Seal.seal(pkOf(s.i), { g: g.id, r: g.r, d: host.dice[i] });
+  }
+  if (sealSeats.length) net.setShared("cups", JSON.stringify({ g: g.id, r: g.r, pk: Seal.pub, box: host.boxes }));
+  return writeGame(g);
+}
+/** A new game: whoever just played keeps their seat, then whoever is waiting, then bots. */
+function newGame(prev) {
+  const live = humans().filter(canSit);
+  const keep = prev ? prev.seats.filter((s) => !s.b && live.includes(s.i)).map((s) => s.i) : [];
+  const ids = [...keep, ...live.filter((id) => !keep.includes(id))].slice(0, CONFIG.maxSeats);
+  const seats = ids.map((id) => ({ i: id, n: playerName(id), c: playerColor(id) }));
+  for (let k = 0; seats.length < Math.max(2, Math.min(CONFIG.maxSeats, CONFIG.seats)); k++) {
+    const c = COLORS.find((x) => !seats.some((s) => s.c === x)) || COLORS[k], n = BOT_NAMES.find((x) => !seats.some((s) => s.n === x)) || "Bot";
+    seats.push({ i: "bot" + k, n, c, b: 1 });
+  }
+  const g = { id: (prev?.id ?? 0) + 1, ph: "roll", seats, dice: seats.map(() => CONFIG.dice), r: 0, turn: 0, t: 0, bid: null, hist: [], call: null, reveal: null, win: -1, ready: [] };
+  return startRound(g, Math.floor(Math.random() * seats.length));
+}
+/** A round: waiting players take bot seats, everyone still in rolls (sealed), the cups rattle. */
+function startRound(g, starter) {
+  const waiting = humans().filter((id) => canSit(id) && seatOf(g, id) < 0), seats = g.seats.slice();
+  if (!ATTRACT) seats.forEach((s, i) => { if (s.b && waiting.length && g.dice[i] > 0) { const id = waiting.shift(); seats[i] = { i: id, n: playerName(id), c: playerColor(id) }; } });
+  host.dice = seats.map((_, i) => Array.from({ length: g.dice[i] }, roll));
+  host.r = g.r + 1; host.boxes = {}; host.think = null;
+  const t = Date.now();
+  return commit({ ...g, seats, ph: "roll", r: g.r + 1, turn: starter, t: g.t + 1, bid: null, hist: [], call: null, reveal: null, endsAt: t + CONFIG.rollMs,
+    turnAt: 0, turnEnds: 0, host: net.sessionId }, seats.map((_, i) => i));
+}
+function placeBid(g, i, c, f) {
+  if (g.ph !== "bid" || g.turn !== i || !Number.isInteger(c) || !Number.isInteger(f) || f < minFace() || f > 6 || c < 1 || c > total(g) || !beats(g.bid, c, f)) return;
+  const t = Date.now();
+  return writeGame({ ...g, bid: { s: i, c, f }, hist: [...g.hist, [i, c, f]].slice(-8), turn: nextIn(g, i), t: g.t + 1, turnAt: t, turnEnds: t + CONFIG.turnMs });
+}
+/** "Liar!": lift every cup, count the dice; whoever was wrong loses one. */
+function callLiar(g, i) {
+  if (g.ph !== "bid" || g.turn !== i || !g.bid) return;
+  const n = host.dice.flat().filter((d) => counts(d, g.bid.f)).length, lose = n >= g.bid.c ? i : g.bid.s, t = Date.now();
+  return writeGame({ ...g, ph: "reveal", t: g.t + 1, call: { by: i, s: g.bid.s, c: g.bid.c, f: g.bid.f, n, lose }, reveal: host.dice.map((d) => d.slice()), endsAt: t + CONFIG.revealMs });
+}
+/** After a reveal: the loser drops a die; the last player with dice wins; else the loser starts the next round. */
+function afterReveal(g) {
+  const dice = g.dice.slice(), lose = g.call.lose;
+  dice[lose] = Math.max(0, dice[lose] - 1);
+  const left = dice.map((n, i) => (n > 0 ? i : -1)).filter((i) => i >= 0);
+  if (left.length <= 1) return writeGame({ ...g, dice, ph: "over", win: left[0] ?? -1, t: g.t + 1, endsAt: Date.now() + CONFIG.overMs, ready: [] });
+  return startRound({ ...g, dice }, dice[lose] > 0 ? lose : nextIn(g, lose, dice));
+}
+/** A bot's move (also made for a human whose time ran out): call liar on an unlikely bid, else raise. */
+function botMove(g, i) {
+  const mine = host.dice[i] || [], hidden = total(g) - mine.length, p = CONFIG.wildOnes ? 1 / 3 : 1 / 6;
+  const have = (f) => mine.filter((d) => counts(d, f)).length;
+  const chance = (c, f) => atLeast(hidden, p, c - have(f));
+  if (g.bid && chance(g.bid.c, g.bid.f) < CONFIG.botDoubt + rnd(-0.1, 0.1)) return callLiar(g, i);
+  const opts = [];
+  for (let f = minFace(); f <= 6; f++) for (let c = g.bid ? g.bid.c : 1; c <= Math.min(total(g), (g.bid ? g.bid.c : have(f) + 1) + 2); c++) if (beats(g.bid, c, f)) opts.push({ c, f, p: chance(c, f) });
+  const bluff = Math.random() < CONFIG.botBluff, base = g.bid ? g.bid.c : 0;
+  const best = opts.sort((a, b) => score(b) - score(a))[0];
+  function score(o) { return (bluff ? Math.random() * 0.6 : o.p) + have(o.f) * 0.04 - (o.c - base) * (g.bid ? 0.06 : -0.08) + Math.random() * 0.08; }
+  if (!best || (g.bid && best.p < 0.3 && Math.random() < 0.7)) return g.bid ? callLiar(g, i) : placeBid(g, i, 1, pick([2, 3, 4, 5, 6]));
+  return placeBid(g, i, best.c, best.f);
+}
+/** An intent from a player (or the host's own). Only the player whose turn it is, on this exact `t`. */
+function handle({ type, from, data: d }) {
+  const g = game();
+  if (!g || !d || d.g !== g.id) return;
+  const i = seatOf(g, from);
+  if (i < 0) return;
+  if (type === "again") return g.ph === "over" && !g.ready.includes(from) ? writeGame({ ...g, ready: [...g.ready, from],
+    endsAt: g.seats.every((s) => s.b || s.i === from || g.ready.includes(s.i)) ? Math.min(g.endsAt, Date.now() + 1200) : g.endsAt }) : undefined;
+  if (d.t !== g.t) return;
+  if (type === "bid") return placeBid(g, i, Number(d.c), Number(d.f));
+  if (type === "liar") return callLiar(g, i);
+}
+/** Gone players hand their seat (and their dice) to a bot. */
+function fixSeats(g) {
+  let changed = false;
+  const seats = g.seats.map((s) => { if (s.b || stillHere(s.i)) return s; changed = true; return { ...s, i: `bot-${g.id}-${s.i.slice(0, 4)}`, n: s.n + " (bot)", b: 1 }; });
+  return changed ? writeGame({ ...g, seats }) : null;
+}
+/** Just became host mid-round: collect everyone's re-sent dice; the bots' dice are re-rolled. */
+function adopt(g, now) {
+  if (!g || g.ph === "over" || g.ph === "reveal" || (g.host === net.sessionId && host.r === g.r && host.dice.length === g.seats.length)) {
+    if (g && g.ph === "reveal") host.dice = g.reveal.map((d) => d.slice());
+    host.ready = true; return;
+  }
+  const mine = seatOf(g, net.sessionId);
+  if (mine >= 0 && myDice.g === g.id && myDice.r === g.r) host.known.set(mine, myDice.d.slice());
+  const missing = g.seats.some((s, i) => !s.b && stillHere(s.i) && g.dice[i] > 0 && !host.known.has(i));
+  if (missing && now - host.since < CONFIG.rejoinMs) return;
+  const held = g.seats.map((_, i) => { const k = host.known.get(i); return k && k.length === g.dice[i] ? k.slice() : null; });
+  host.dice = held.map((d, i) => d || Array.from({ length: g.dice[i] }, roll));
+  host.r = g.r; host.boxes = {}; host.known.clear(); host.ready = true; host.think = null; host.busy = true;
+  const reseal = g.seats.map((s, i) => (!s.b && !held[i] && g.dice[i] > 0 ? i : -1)).filter((i) => i >= 0);
+  commit({ ...g, host: net.sessionId, turnAt: Date.now(), turnEnds: Math.max(g.turnEnds || 0, Date.now() + 6000) }, reseal).finally(() => { host.busy = false; });
+}
+function hostTick(now) {
+  if (!host.since) host.since = now;
+  if (host.busy) return;
+  const g = game(), t = Date.now();
+  if (!host.ready) return adopt(g, now);
+  const run = (p) => { if (!p) return; host.busy = true; Promise.resolve(p).catch((e) => console.warn(e)).finally(() => { host.busy = false; }); };
+  if (host.inbox.length) return run(handle(host.inbox.shift()));
+  if (!g) return run(newGame(null));
+  if (g.ph === "over") { if (t > g.endsAt) run(newGame(g)); return; }
+  const seatChange = fixSeats(g);
+  if (seatChange) return;
+  if (g.ph === "roll") { if (t >= g.endsAt) writeGame({ ...g, ph: "bid", t: g.t + 1, turnAt: t, turnEnds: t + CONFIG.turnMs }); return; }
+  if (g.ph === "reveal") { if (t >= g.endsAt) run(afterReveal(g)); return; }
+  const s = g.seats[g.turn];
+  if (s.b) {
+    if (!host.think || host.think.t !== g.t) host.think = { t: g.t, at: g.turnAt + rnd(...CONFIG.botMs) };
+    if (t >= host.think.at) run(botMove(g, g.turn));
+  } else if (t > g.turnEnds) run(botMove(g, g.turn)); // out of time: the host bids for you
+}
+function stopHosting() { if (!host.since) return; Object.assign(host, { ready: false, since: 0, busy: false, last: null, inbox: [] }); host.known.clear(); }
+
+// ── MY CUP ──────────────────────────────────────────────────────────────────────────
+let myName = "", myColor = COLORS[0], dropped = false;
+try { myName = localStorage.getItem("mpa-name") || ""; } catch {}
+if (!myName) { myName = pick(NAME_A) + " " + pick(NAME_B); try { localStorage.setItem("mpa-name", myName); } catch {} }
+const myDice = { g: -1, r: -1, d: [] }; // my dice this round, once my sealed box is open
+let cupsRaw = null, opening = false, lastResend = 0, sentT = "", sentAt = 0;
+/** My dice: the host reads its own memory; everyone else opens their sealed box in `cups`. */
+function readMyDice(g) {
+  const i = seatOf(g, net.sessionId);
+  if (isHost() && host.ready && i >= 0 && host.r === g.r && host.dice[i]) { Object.assign(myDice, { g: g.id, r: g.r, d: host.dice[i] }); return; }
+  const raw = S.shared.cups;
+  if (raw === cupsRaw || opening) return;
+  const R = parse(raw, null), box = R && R.g === g.id && R.r === g.r && R.box ? R.box[net.sessionId] : null;
+  if (!box) { if (!R || (R.g === g.id && R.r === g.r)) cupsRaw = raw; return; }
+  opening = true;
+  Seal.open(R.pk, box).then((v) => { cupsRaw = raw; if (v && v.g === g.id && Array.isArray(v.d)) Object.assign(myDice, { g: v.g, r: v.r, d: v.d }); }).finally(() => { opening = false; });
+}
+/** A new host hasn't taken the table yet: send it my dice, sealed so only it can read them. */
+function resendDice(g, now) {
+  const hostId = livePlayers()[0], pk = pkOf(hostId);
+  if (hostId === net.sessionId || !pk || g.host === hostId || !["roll", "bid"].includes(g.ph) || myDice.g !== g.id || myDice.r !== g.r || now - lastResend < 1500) return;
+  lastResend = now;
+  Seal.seal(pk, myDice.d).then((box) => net.send("mydice", { to: hostId, g: g.id, r: g.r, box }));
+}
+/** Send an intent to the host (the host queues its own). */
+function act(type, data) {
+  const g = game();
+  if (!g) return;
+  const msg = { g: g.id, t: g.t, ...data };
+  sentT = g.id + ":" + g.t; sentAt = performance.now();
+  if (isHost()) host.inbox.push({ type, from: net.sessionId, data: msg }); else net.send(type, msg);
+}
+const myTurn = (g) => g.ph === "bid" && g.turn === seatOf(g, net.sessionId) && sentT !== g.id + ":" + g.t;
+const pickBid = { c: 1, f: 2, key: "" }; // what the bid panel shows
+/** Start the panel on the smallest raise of the face I hold most of. */
+function suggest(g) {
+  const key = g.id + ":" + g.t;
+  if (pickBid.key === key) return;
+  pickBid.key = key;
+  const have = (f) => myDice.d.filter((d) => counts(d, f)).length;
+  let f = minFace(); for (let k = minFace(); k <= 6; k++) if (have(k) > have(f)) f = k;
+  pickBid.f = f; pickBid.c = 1;
+  while (!beats(g.bid, pickBid.c, pickBid.f) && pickBid.c < total(g)) pickBid.c++;
+}
+
+// ── SCENE ───────────────────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(CONFIG.room);
+scene.fog = new THREE.Fog(CONFIG.room, 12, 30);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+function fit() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+addEventListener("resize", fit); addEventListener("orientationchange", fit); fit();
+scene.add(new THREE.HemisphereLight("#ffe2c2", "#2a1608", 0.9));
+const lamp = new THREE.SpotLight("#ffd9a0", 190, 22, 0.75, 0.55, 1.6);
+lamp.position.set(0, 7.2, 0); lamp.target.position.set(0, 0, 0); lamp.castShadow = true; lamp.shadow.mapSize.set(1024, 1024); lamp.shadow.bias = -0.0004;
+scene.add(lamp, lamp.target);
+const fill = new THREE.PointLight("#ff9b5a", 18, 16, 1.6); fill.position.set(-5, 3, 4); scene.add(fill);
+
+function canvasTex(w, h, paint) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h; paint(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+// The tavern floor, a pool of lamplight under the table.
+const floorTex = canvasTex(512, 512, (c, w) => {
+  for (let i = 0; i < 16; i++) { c.fillStyle = i % 2 ? "#2b1a10" : "#26170d"; c.fillRect(0, i * 32, w, 32); c.fillStyle = "#0004"; c.fillRect(0, i * 32, w, 2); }
+  const g = c.createRadialGradient(w / 2, w / 2, 20, w / 2, w / 2, w / 2); g.addColorStop(0, "#0000"); g.addColorStop(1, CONFIG.room); c.fillStyle = g; c.fillRect(0, 0, w, w);
+});
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 1 }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = -2.2; floor.receiveShadow = true; scene.add(floor);
+// The round table: a wooden drum, a felt top, a rail around it, one thick leg.
+const TABLE_R = 4.2;
+const wood = new THREE.MeshStandardMaterial({ color: CONFIG.wood, roughness: 0.55 });
+const drum = new THREE.Mesh(new THREE.CylinderGeometry(TABLE_R + 0.15, TABLE_R, 0.32, 64), wood);
+drum.position.y = -0.17; drum.receiveShadow = true; drum.castShadow = true; scene.add(drum);
+const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 2, 24), wood); leg.position.y = -1.3; scene.add(leg);
+const feltTex = canvasTex(512, 512, (c, w) => {
+  const g = c.createRadialGradient(w / 2, w / 2, 10, w / 2, w / 2, w / 2); g.addColorStop(0, "#2a7556"); g.addColorStop(1, CONFIG.felt); c.fillStyle = g; c.fillRect(0, 0, w, w);
+  for (let i = 0; i < 9000; i++) { c.fillStyle = Math.random() < 0.5 ? "#ffffff06" : "#00000008"; c.fillRect(Math.random() * w, Math.random() * w, 2, 2); }
+  c.strokeStyle = "#e6c77a55"; c.lineWidth = 4; c.beginPath(); c.arc(w / 2, w / 2, w * 0.2, 0, Math.PI * 2); c.stroke();
+});
+const felt = new THREE.Mesh(new THREE.CircleGeometry(TABLE_R - 0.05, 64), new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.95 }));
+felt.rotation.x = -Math.PI / 2; felt.position.y = 0.001; felt.receiveShadow = true; scene.add(felt);
+const rail = new THREE.Mesh(new THREE.TorusGeometry(TABLE_R + 0.02, 0.17, 12, 72), new THREE.MeshStandardMaterial({ color: "#6e3f22", roughness: 0.45 }));
+rail.rotation.x = Math.PI / 2; rail.position.y = 0.05; rail.castShadow = true; scene.add(rail);
+
+// ── DICE & CUPS ─────────────────────────────────────────────────────────────────────
+const PIPS = { 1: [[0.5, 0.5]], 2: [[0.27, 0.27], [0.73, 0.73]], 3: [[0.26, 0.26], [0.5, 0.5], [0.74, 0.74]], 4: [[0.27, 0.27], [0.73, 0.27], [0.27, 0.73], [0.73, 0.73]],
+  5: [[0.26, 0.26], [0.74, 0.26], [0.5, 0.5], [0.26, 0.74], [0.74, 0.74]], 6: [[0.27, 0.24], [0.73, 0.24], [0.27, 0.5], [0.73, 0.5], [0.27, 0.76], [0.73, 0.76]] };
+/** One die face, drawn on a canvas: ivory with dark pips (the 1 is red). */
+function paintFace(c, w, v) {
+  c.fillStyle = "#c9bca3"; c.fillRect(0, 0, w, w);
+  const g = c.createRadialGradient(w * 0.4, w * 0.35, w * 0.1, w / 2, w / 2, w * 0.72); g.addColorStop(0, "#fffaf0"); g.addColorStop(1, "#e8dcc6");
+  c.fillStyle = g; c.beginPath(); c.roundRect(w * 0.04, w * 0.04, w * 0.92, w * 0.92, w * 0.18); c.fill();
+  c.fillStyle = v === 1 ? "#c62828" : "#2a1e1a";
+  for (const [x, y] of PIPS[v]) { c.beginPath(); c.arc(x * w, y * w, w * (v === 1 ? 0.14 : 0.095), 0, Math.PI * 2); c.fill(); }
+}
+const FACE_TEX = [0, 1, 2, 3, 4, 5, 6].map((v) => (v ? canvasTex(128, 128, (c, w) => paintFace(c, w, v)) : null));
+const FACE_IMG = [0, 1, 2, 3, 4, 5, 6].map((v) => { if (!v) return ""; const c = document.createElement("canvas"); c.width = c.height = 64; paintFace(c.getContext("2d"), 64, v); return c.toDataURL(); });
+const faceImg = (v) => `<img src="${FACE_IMG[v]}" alt="${v}">`;
+// Box faces in three's order (+x, -x, +y, -y, +z, -z); opposite faces add up to 7.
+const DIE_MATS = [3, 4, 1, 6, 2, 5].map((v) => new THREE.MeshStandardMaterial({ map: FACE_TEX[v], roughness: 0.6 }));
+const DIM_MATS = [3, 4, 1, 6, 2, 5].map((v) => new THREE.MeshStandardMaterial({ map: FACE_TEX[v], roughness: 0.8, color: "#6f665a" })); // dice that don't count, at a reveal
+const DIE = 0.36, dieGeo = new THREE.BoxGeometry(DIE, DIE, DIE);
+const UP = { 1: [0, 0, 0], 6: [Math.PI, 0, 0], 2: [-Math.PI / 2, 0, 0], 5: [Math.PI / 2, 0, 0], 3: [0, 0, Math.PI / 2], 4: [0, 0, -Math.PI / 2] }; // turns face v to the top
+/** A die showing `v` on top, turned `yaw` around the vertical. */
+function makeDie(v, yaw, size = 1) {
+  const grp = new THREE.Group(), m = new THREE.Mesh(dieGeo, DIE_MATS);
+  m.castShadow = true; m.rotation.set(...UP[v]); grp.add(m); grp.rotation.y = yaw; grp.scale.setScalar(size);
+  const halo = new THREE.Mesh(new THREE.RingGeometry(0.21, 0.4, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffd25a", transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  halo.position.y = -DIE / 2 + 0.01; grp.add(halo);
+  grp.userData = { v, m, halo };
+  return grp;
+}
+function setFace(die, v) { die.userData.v = v; die.userData.m.rotation.set(...UP[v]); }
+/** Where die k of n sits (local x, z): a row, so they are easy to count; my own row leaves room for my cup. */
+const diePos = (k, n, mine) => [(k - (n - 1) / 2) * (mine ? 0.58 : 0.44) - (mine ? 0.45 : 0), mine ? -0.15 : 0];
+// The cup: a leather tumbler, open end down, with a band in the player's color.
+const cupTex = canvasTex(256, 128, (c, w, h) => {
+  c.fillStyle = CONFIG.leather; c.fillRect(0, 0, w, h);
+  for (let i = 0; i < 2500; i++) { c.fillStyle = Math.random() < 0.5 ? "#00000012" : "#ffffff0a"; c.fillRect(Math.random() * w, Math.random() * h, 3, 1); }
+  c.strokeStyle = "#e9c48a66"; c.setLineDash([6, 6]); c.lineWidth = 2;
+  for (const y of [h * 0.12, h * 0.86]) { c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke(); }
+});
+const cupGeo = new THREE.LatheGeometry([new THREE.Vector2(0.62, 0), new THREE.Vector2(0.64, 0.05), new THREE.Vector2(0.52, 1.1), new THREE.Vector2(0.47, 1.2), new THREE.Vector2(0.001, 1.22)], 32);
+const cupMat = new THREE.MeshStandardMaterial({ map: cupTex, roughness: 0.75, side: THREE.DoubleSide });
+const bandGeo = new THREE.TorusGeometry(0.585, 0.055, 8, 32).rotateX(Math.PI / 2);
+const ringGeo = new THREE.RingGeometry(0.78, 0.92, 40).rotateX(-Math.PI / 2);
+
+/** A text label on a sprite (name tags, bubbles, the bid). */
+function labelSprite(w, h, scale) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  s.scale.set(scale, scale * (h / w), 1); s.renderOrder = 5; s.userData = { c, ctx: c.getContext("2d"), tex, key: "" };
+  return s;
+}
+function paintLabel(s, key, paint) {
+  if (s.userData.key === key) return;
+  s.userData.key = key;
+  const { c, ctx: x } = s.userData;
+  x.clearRect(0, 0, c.width, c.height); paint(x, c.width, c.height); s.userData.tex.needsUpdate = true;
+}
+const views = []; // per seat: { root, cup, band, ring, dice: [], tag, bubble, bubbleAt, cupAt }
+const BUBBLE_MS = 2600;
+function seatView(i) {
+  if (views[i]) return views[i];
+  const root = new THREE.Group(), cup = new THREE.Group(), body = new THREE.Mesh(cupGeo, cupMat), band = new THREE.Mesh(bandGeo, new THREE.MeshStandardMaterial({ color: "#fff", roughness: 0.5 }));
+  body.castShadow = true; band.position.y = 0.62; cup.add(body, band); root.add(cup);
+  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: "#ffd25a", transparent: true, opacity: 0, depthWrite: false })); ring.position.y = 0.01; root.add(ring);
+  const tag = labelSprite(320, 112, 1.75), bubble = labelSprite(320, 128, 1.9);
+  tag.position.set(0, 1.75, -0.3); bubble.position.set(0, 2.45, -0.35); bubble.material.opacity = 0; root.add(tag, bubble);
+  scene.add(root);
+  return (views[i] = { root, cup, band, ring, dice: [], tag, bubble, bubbleAt: -1e9, cupPose: { x: 0, y: 0, z: 0, side: 0, lift: 0 }, lostAt: -1e9 });
+}
+// The bid in the middle of the table: a big die with the count beside it.
+const bidDie = makeDie(2, 0, 1.9); bidDie.position.set(0, DIE * 0.95, 0); bidDie.visible = false; scene.add(bidDie);
+const bidTag = labelSprite(256, 128, 1.3); bidTag.position.set(0, 1.45, 0); bidTag.visible = false; scene.add(bidTag);
+const callTag = labelSprite(512, 160, 3.4); callTag.position.set(0, 1.55, 0); callTag.material.opacity = 0; scene.add(callTag);
+
+/** Where seat i sits: my seat is always at the front, toward the camera. */
+function seatAngle(g, i) { const n = g.seats.length, mine = ATTRACT ? 0 : Math.max(0, seatOf(g, net.sessionId)); return Math.PI / 2 + ((i - mine) / n) * Math.PI * 2; }
+const CUP_R = 2.75;
+/** Put every seat's cup, dice, tag and bubble where the game says, easing toward it. */
+function syncTable(g, now, dt) {
+  const mine = seatOf(g, net.sessionId), ph = g.ph, k = 1 - Math.exp(-dt * 9);
+  views.forEach((v, i) => { v.root.visible = i < g.seats.length; });
+  g.seats.forEach((s, i) => {
+    const v = seatView(i), a = seatAngle(g, i), out = g.dice[i] <= 0, me = i === mine && !ATTRACT;
+    v.root.position.set(Math.cos(a) * CUP_R, 0, Math.sin(a) * CUP_R); v.root.rotation.y = Math.PI / 2 - a; // local -z points at the middle, +x to the player's right
+    v.band.material.color.set(s.c);
+    // the cup: rattling, down, set aside (my own, so I can see my dice), lifted (reveal), or tipped over (out)
+    const rattle = ph === "roll" && !out, lifted = ph === "reveal" || ph === "over", peek = me && ph === "bid" && myDice.g === g.id && myDice.r === g.r;
+    const side = -Math.PI / 2; // lying on its side, mouth toward the dice
+    const want = out && !lifted ? { x: 0, y: 0.62, z: 0, side, lift: 0 } : lifted ? { x: 0, y: 1.45, z: 0.95, side: 0, lift: 0.7 }
+      : peek ? { x: 1.1 + myDice.d.length * 0.1, y: 0.62, z: 0, side, lift: 0 } : { x: 0, y: 0, z: 0, side: 0, lift: 0 };
+    for (const key of ["x", "y", "z", "side", "lift"]) v.cupPose[key] += (want[key] - v.cupPose[key]) * k;
+    const shake = rattle ? Math.sin(now / 38 + i * 2) * 0.1 : 0;
+    v.cup.position.set(v.cupPose.x + shake * 0.6, v.cupPose.y + (rattle ? Math.abs(Math.sin(now / 55 + i)) * 0.12 : 0), v.cupPose.z);
+    v.cup.rotation.set(v.cupPose.lift, 0, v.cupPose.side + shake); // lifted: pulled back with its mouth toward the middle
+    // the dice under it: shown when revealed, or my own
+    const faces = ph === "reveal" && g.reveal ? g.reveal[i] : peek ? myDice.d : [];
+    syncDice(v, faces, g, now, peek);
+    // the turn ring, the name tag and the speech bubble
+    const turn = ph === "bid" && g.turn === i;
+    v.ring.material.color.set(turn ? "#ffd25a" : s.c); v.ring.material.opacity = turn ? 0.55 + Math.sin(now / 160) * 0.3 : 0;
+    v.tag.visible = !me;
+    paintLabel(v.tag, [s.n, s.c, g.dice[i], turn, s.b].join("|"), (x, w, h) => drawTag(x, w, h, s, g.dice[i], turn));
+    const age = now - v.bubbleAt;
+    v.bubble.material.opacity = age < BUBBLE_MS ? Math.min(1, age / 120, (BUBBLE_MS - age) / 300) : 0;
+    v.bubble.scale.setScalar(1.9 * (age < 200 ? 0.6 + (age / 200) * 0.4 : 1)); v.bubble.scale.y *= 128 / 320;
+  });
+  // the bid in the middle
+  bidDie.visible = !!g.bid && (ph === "bid" || ph === "reveal"); bidTag.visible = bidDie.visible && ph === "bid";
+  if (g.bid) {
+    if (bidDie.userData.v !== g.bid.f) setFace(bidDie, g.bid.f);
+    bidDie.rotation.y += dt * 0.6;
+    const pop = Math.max(0, 1 - (now - bidPopAt) / 300);
+    bidDie.scale.setScalar(1.9 * (1 + pop * 0.35)); bidDie.position.y = DIE * 0.95 + pop * 0.3;
+    paintLabel(bidTag, "x" + g.bid.c, (x, w, h) => { x.font = "900 96px system-ui, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.lineWidth = 12; x.strokeStyle = "#1a0f08"; x.strokeText("×" + g.bid.c, w / 2, h / 2); x.fillStyle = "#ffe08a"; x.fillText("×" + g.bid.c, w / 2, h / 2); });
+  }
+  const ca = now - callAt;
+  callTag.material.opacity = ph === "reveal" ? Math.min(1, ca / 150) : Math.max(0, callTag.material.opacity - dt * 3);
+  callTag.scale.set(3.4 * (ca < 250 ? 0.5 + ca / 500 : 1), 3.4 * (160 / 512) * (ca < 250 ? 0.5 + ca / 500 : 1), 1);
+  tickFlying(now, dt);
+}
+function drawTag(x, w, h, s, n, turn) {
+  x.fillStyle = turn ? "#ffd25aee" : "#160d08d8"; x.beginPath(); x.roundRect(6, 6, w - 12, h - 12, 26); x.fill();
+  x.strokeStyle = s.c; x.lineWidth = 6; x.stroke();
+  x.fillStyle = turn ? "#2b1a00" : "#fff"; x.font = "800 40px system-ui, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillText((s.n.length > 13 ? s.n.slice(0, 12) + "…" : s.n), w / 2, 40);
+  for (let k = 0; k < CONFIG.dice; k++) { x.fillStyle = k < n ? (turn ? "#2b1a00" : "#f3e6cc") : turn ? "#2b1a0033" : "#ffffff22"; x.beginPath(); x.roundRect(w / 2 - CONFIG.dice * 17 + k * 34 + 4, 66, 26, 26, 6); x.fill(); }
+}
+/** Rebuild a seat's dice when the faces it should show change; at a reveal, light the ones that count. */
+function syncDice(v, faces, g, now, mine) {
+  const key = faces.join("") + mine;
+  if (v.diceKey !== key) {
+    v.diceKey = key;
+    for (const d of v.dice) v.root.remove(d);
+    v.dice = faces.map((f, k) => { const d = makeDie(f, ((k * 1.7) % 0.5) - 0.25); const [x, z] = diePos(k, faces.length, mine); d.position.set(x, DIE / 2, z); v.root.add(d); d.userData.born = now + k * 60; return d; });
+  }
+  const call = g.ph === "reveal" && g.call;
+  v.dice.forEach((d, k) => {
+    const lit = call && counts(d.userData.v, call.f), t = now - d.userData.born;
+    d.userData.halo.material.opacity = lit ? 0.75 + Math.sin(now / 140) * 0.25 : 0;
+    d.userData.m.material = call && !lit ? DIM_MATS : DIE_MATS;
+    d.position.y = (DIE / 2) * (mine ? 1.35 : 1) + (lit ? Math.abs(Math.sin(now / 220 + k)) * 0.12 : 0) + Math.max(0, 1 - t / 250) * 0.4;
+    d.scale.setScalar((mine ? 1.35 : 1) * Math.max(0.01, Math.min(1, 0.4 + t / 250)));
+  });
+}
+// A die that flies off the table when a player loses it.
+const flying = [];
+function loseDie(i, now) {
+  const v = views[i];
+  if (!v) return;
+  const d = makeDie(1 + Math.floor(Math.random() * 6), 0), p = new THREE.Vector3(0, DIE / 2, 0).applyMatrix4(v.root.matrixWorld);
+  d.position.copy(p); scene.add(d); flying.push({ d, at: now, from: p.clone() });
+}
+function tickFlying(now) {
+  for (let k = flying.length - 1; k >= 0; k--) {
+    const f = flying[k], t = (now - f.at) / 1100;
+    if (t >= 1) { scene.remove(f.d); flying.splice(k, 1); continue; }
+    f.d.position.set(f.from.x * (1 + t * 0.8), f.from.y + Math.sin(t * Math.PI) * 2.2 + t * 1.5, f.from.z * (1 + t * 0.8));
+    f.d.rotation.set(t * 9, t * 6, t * 4); f.d.scale.setScalar(1 - t * 0.7);
+  }
+}
+
+// ── HUD & RESULTS ───────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+for (let f = minFace(); f <= 6; f++) $("faces").insertAdjacentHTML("beforeend", `<button data-f="${f}" aria-label="${f}s">${faceImg(f)}</button>`);
+const nameOfSeat = (g, i) => (i === seatOf(g, net.sessionId) && !ATTRACT ? "You" : esc(g.seats[i].n));
+const bidHtml = (c, f) => `${c} × ${faceImg(f)}`;
+function hud(g) {
+  const i = seatOf(g, net.sessionId), t = Date.now(), b = g.bid, myT = myTurn(g) && !ATTRACT;
+  let st = "", sub = "";
+  if (g.ph === "roll") { st = g.r === 1 ? "Shake the cups!" : `Round ${g.r}`; sub = i >= 0 && g.dice[i] > 0 && !ATTRACT ? "Your dice are under your cup. Only you can see them." : ""; }
+  else if (g.ph === "bid") {
+    st = myT ? (b ? `${nameOfSeat(g, b.s)} bid ${bidHtml(b.c, b.f)} · raise or call liar` : "Your bid · you start") : b ? `${nameOfSeat(g, b.s)} bid ${bidHtml(b.c, b.f)}` : `${nameOfSeat(g, g.turn)} starts`;
+    sub = myT ? `${Math.max(0, Math.ceil((g.turnEnds - t) / 1000))}s · bid on ALL ${total(g)} dice on the table${CONFIG.wildOnes ? " · ones are wild" : ""}`
+      : i >= 0 && g.dice[i] > 0 && !ATTRACT ? `${nameOfSeat(g, g.turn)} is thinking…` : i < 0 && !ATTRACT ? "You're watching. You'll get a seat when a bot's comes free." : "";
+  } else if (g.ph === "reveal" && g.call) {
+    const c = g.call, ok = c.n >= c.c;
+    st = `${nameOfSeat(g, c.by)} called liar! There ${c.n === 1 ? "was" : "were"} ${c.n} × ${faceImg(c.f)}`;
+    sub = `${nameOfSeat(g, c.s)} bid ${c.c}, so ${ok ? `the bid was right: ${nameOfSeat(g, c.by)}` : `it was a bluff: ${nameOfSeat(g, c.s)}`} ${c.lose === i && !ATTRACT ? "lose" : "loses"} a die.${CONFIG.wildOnes ? " (Ones count.)" : ""}`;
+  } else if (g.ph === "over") { st = g.win === i && !ATTRACT ? "You win!" : g.win >= 0 ? `${esc(g.seats[g.win].n)} wins!` : "Game over"; }
+  if (ATTRACT) sub = "";
+  if ($("status").innerHTML !== st) $("status").innerHTML = st;
+  if ($("sub").innerHTML !== sub) $("sub").innerHTML = sub;
+  const hist = !ATTRACT && (g.ph === "bid" || g.ph === "reveal") ? g.hist.slice(-5).map(([s, c, f]) => `<div>${nameOfSeat(g, s)}: ${bidHtml(c, f)}</div>`).join("") : "";
+  if ($("hist").innerHTML !== hist) $("hist").innerHTML = hist;
+  $("panel").hidden = !myT;
+  if (myT) { suggest(g); renderPanel(g); }
+  const n = livePlayers().length;
+  $("net").textContent = ATTRACT ? "" : net.offline ? "Offline: playing with bots" : dropped ? "Reconnecting…" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the table" : ""}`;
+  results(g);
+}
+function renderPanel(g) {
+  $("count").textContent = pickBid.c;
+  for (const b of $("faces").children) b.classList.toggle("on", +b.dataset.f === pickBid.f);
+  const ok = beats(g.bid, pickBid.c, pickBid.f);
+  const label = `Bid ${bidHtml(pickBid.c, pickBid.f)}`;
+  $("bidBtn").disabled = !ok; if ($("bidBtn").innerHTML !== label) $("bidBtn").innerHTML = label;
+  $("liarBtn").disabled = !g.bid; $("minus").disabled = pickBid.c <= 1; $("plus").disabled = pickBid.c >= total(g);
+}
+let board = null, resultsFor = -1;
+function results(g) {
+  $("over").hidden = g.ph !== "over" || ATTRACT;
+  if (g.ph !== "over") return;
+  $("oNext").textContent = `Next game in ${Math.max(0, Math.ceil((g.endsAt - Date.now()) / 1000))}s`;
+  $("again").textContent = g.ready.includes(net.sessionId) ? "Ready ✓" : "Play again";
+  if (resultsFor === g.id) return;
+  resultsFor = g.id;
+  const i = seatOf(g, net.sessionId), won = i >= 0 && g.win === i;
+  $("oTitle").textContent = won ? "You win!" : g.win >= 0 ? `${g.seats[g.win].n} wins` : "Game over";
+  $("oSub").textContent = won ? "Last one with dice. Nobody saw through you." : i >= 0 ? "Your cup ran dry this time." : "";
+  $("again").hidden = i < 0;
+  const list = $("board");
+  if (!board) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
+  list.innerHTML = "<li>Loading…</li>";
+  (won ? board.submit(1, "inc").catch(() => null) : Promise.resolve()).then(() => board.top(10)).then(({ entries }) => {
+    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score}</span></li>`).join("") : "<li>No wins yet. Be the first.</li>";
+  }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+}
+/** Sounds, bubbles and flying dice when something lands in state (effects only: nothing here decides anything). */
+let seenKey = "", seenDice = null, bidPopAt = -1e9, callAt = -1e9;
+function effects(g, now) {
+  const key = g.id + ":" + g.t, first = !seenKey;
+  if (key === seenKey) return;
+  seenKey = key;
+  const prevDice = seenDice; seenDice = { g: g.id, d: g.dice.slice() };
+  if (first) return;
+  if (prevDice && prevDice.g === g.id) g.dice.forEach((n, i) => { if (n < prevDice.d[i]) { loseDie(i, now); sound(110, 0.25, "sawtooth"); } });
+  if (g.ph === "roll") rattle();
+  const last = g.hist[g.hist.length - 1];
+  if (g.ph === "bid" && last && g.bid && last[0] === g.bid.s && last[1] === g.bid.c && last[2] === g.bid.f && bubbleFor !== key) {
+    bubbleFor = key; bidPopAt = now;
+    const v = views[last[0]];
+    for (const o of views) if (o !== v && now - o.bubbleAt < BUBBLE_MS - 300) o.bubbleAt = now - BUBBLE_MS + 300; // older bubbles fade out
+    if (v) { v.bubbleAt = now; paintLabel(v.bubble, "b" + key, (x, w, h) => drawBubble(x, w, h, last[1], last[2])); }
+    sound(520 + last[2] * 40, 0.08);
+  }
+  if (g.ph === "reveal" && g.call) {
+    callAt = now;
+    const v = views[g.call.by];
+    if (v) { v.bubbleAt = now; paintLabel(v.bubble, "liar" + key, (x, w, h) => drawBubble(x, w, h, 0, 0)); }
+    paintLabel(callTag, "c" + key, (x, w, h) => { x.font = "900 120px system-ui, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.lineWidth = 14; x.strokeStyle = "#2a0705"; x.strokeText(`${g.call.n} × `, w / 2 - 50, h / 2); x.fillStyle = g.call.n >= g.call.c ? "#9dff8a" : "#ff6a5e"; x.fillText(`${g.call.n} × `, w / 2 - 50, h / 2); x.drawImage(faceCanvas[g.call.f], w / 2 + 70, h / 2 - 55, 110, 110); });
+    sound(90, 0.45, "square"); setTimeout(() => sound(g.call.n >= g.call.c ? 660 : 200, 0.3), 450);
+  }
+  if (g.ph === "over" && g.win >= 0) { confetti(); sound(784, 0.4); }
+}
+let bubbleFor = "";
+const faceCanvas = [0, 1, 2, 3, 4, 5, 6].map((v) => { if (!v) return null; const c = document.createElement("canvas"); c.width = c.height = 128; paintFace(c.getContext("2d"), 128, v); return c; });
+/** A speech bubble: "4 × [die]", or "LIAR!" when count is 0. */
+function drawBubble(x, w, h, c, f) {
+  x.fillStyle = c ? "#fff8ea" : "#ff4b3e"; x.beginPath(); x.roundRect(8, 8, w - 16, h - 34, 26); x.fill();
+  x.beginPath(); x.moveTo(w / 2 - 16, h - 28); x.lineTo(w / 2, h - 4); x.lineTo(w / 2 + 16, h - 28); x.fill();
+  x.textAlign = "center"; x.textBaseline = "middle";
+  if (!c) { x.fillStyle = "#fff"; x.font = "900 64px system-ui, sans-serif"; x.fillText("LIAR!", w / 2, (h - 26) / 2 + 4); return; }
+  x.fillStyle = "#2a1a10"; x.font = "900 62px system-ui, sans-serif"; x.fillText(`${c} ×`, w / 2 - 40, (h - 26) / 2 + 4);
+  x.drawImage(faceCanvas[f], w / 2 + 30, (h - 26) / 2 - 36, 72, 72);
+}
+// Confetti on a win, drawn on a canvas over the table.
+const fx = $("fx"), fxc = fx.getContext("2d"), bits = [];
+function confetti() { for (let k = 0; k < 120; k++) bits.push({ x: innerWidth / 2, y: innerHeight * 0.45, vx: (Math.random() - 0.5) * 600, vy: -250 - Math.random() * 450, c: ["#ffd25a", "#ff6b5e", "#69db7c", "#4dabf7", "#fff"][k % 5], r: Math.random() * 6, life: 1.8 }); }
+function drawFx(dt) {
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  if (fx.width !== Math.round(innerWidth * dpr)) { fx.width = Math.round(innerWidth * dpr); fx.height = Math.round(innerHeight * dpr); }
+  fxc.setTransform(dpr, 0, 0, dpr, 0, 0); fxc.clearRect(0, 0, innerWidth, innerHeight);
+  for (let k = bits.length - 1; k >= 0; k--) {
+    const b = bits[k]; b.life -= dt; b.vy += 700 * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.r += dt * 8;
+    if (b.life <= 0) { bits.splice(k, 1); continue; }
+    fxc.save(); fxc.translate(b.x, b.y); fxc.rotate(b.r); fxc.fillStyle = b.c; fxc.globalAlpha = Math.min(1, b.life); fxc.fillRect(-4, -2.5, 8, 5); fxc.restore();
+  }
+}
+let actx = null; // sounds start after the first tap or key (browsers require it)
+function unlockAudio() { if (!actx && !ATTRACT) try { actx = new AudioContext(); } catch {} }
+function sound(freq, len, type = "triangle") {
+  if (!actx) return;
+  const t = actx.currentTime, o = actx.createOscillator(), gn = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  gn.gain.setValueAtTime(0.1, t); gn.gain.exponentialRampToValueAtTime(0.001, t + len + 0.08);
+  o.connect(gn).connect(actx.destination); o.start(t); o.stop(t + len + 0.1);
+}
+/** The cups rattling: short bursts of noise. */
+function rattle() {
+  if (!actx) return;
+  const buf = actx.createBuffer(1, actx.sampleRate * 0.05, actx.sampleRate), d = buf.getChannelData(0);
+  for (let k = 0; k < d.length; k++) d[k] = (Math.random() * 2 - 1) * (1 - k / d.length);
+  for (let n = 0; n < 12; n++) { const s = actx.createBufferSource(), gn = actx.createGain(); s.buffer = buf; gn.gain.value = 0.12; s.connect(gn).connect(actx.destination); s.start(actx.currentTime + n * 0.11 + Math.random() * 0.04); }
+}
+
+// ── INPUT / LOOP ────────────────────────────────────────────────────────────────────
+function changeBid(dc, f) {
+  const g = game();
+  if (!g || !myTurn(g)) return;
+  if (f) pickBid.f = f;
+  pickBid.c = Math.max(1, Math.min(total(g), pickBid.c + dc));
+  sound(400 + pickBid.c * 20, 0.04); renderPanel(g);
+}
+function sendBid() { const g = game(); if (g && myTurn(g) && beats(g.bid, pickBid.c, pickBid.f)) { unlockAudio(); act("bid", { c: pickBid.c, f: pickBid.f }); $("panel").hidden = true; } }
+function sendLiar() { const g = game(); if (g && myTurn(g) && g.bid) { unlockAudio(); act("liar", {}); $("panel").hidden = true; } }
+$("minus").addEventListener("click", () => changeBid(-1));
+$("plus").addEventListener("click", () => changeBid(1));
+$("faces").addEventListener("click", (e) => { const b = e.target.closest("button[data-f]"); if (b) changeBid(0, +b.dataset.f); });
+$("bidBtn").addEventListener("click", sendBid);
+$("liarBtn").addEventListener("click", sendLiar);
+$("again").addEventListener("click", () => act("again", {}));
+addEventListener("pointerdown", unlockAudio);
+addEventListener("keydown", (e) => {
+  if (e.target === $("name")) return;
+  unlockAudio();
+  const k = e.key.toLowerCase();
+  if (k === "arrowup" || k === "+" || k === "=") changeBid(1);
+  else if (k === "arrowdown" || k === "-") changeBid(-1);
+  else if (k >= String(minFace()) && k <= "6" && k.length === 1) changeBid(0, +k);
+  else if (k === "enter") sendBid();
+  else if (k === "l") sendLiar();
+  else return;
+  e.preventDefault();
+});
+$("name").value = myName;
+$("name").addEventListener("change", () => {
+  myName = $("name").value.trim().slice(0, 14) || myName;
+  try { localStorage.setItem("mpa-name", myName); } catch {}
+  net && net.me.set("n", myName);
+});
+document.addEventListener("touchmove", (e) => { if (!e.target.closest(".card")) e.preventDefault(); }, { passive: false });
+
+/** The camera sits behind my seat and backs off until the whole table fits; the preview circles the table. */
+const camAt = new THREE.Vector3(), camGoal = new THREE.Vector3();
+function aimCamera(dt, now) {
+  const portrait = innerHeight > innerWidth * 1.1, elev = ATTRACT ? 0.74 : portrait ? 1.12 : 0.82;
+  const ang = ATTRACT ? Math.PI / 2 + now / 7000 : Math.PI / 2;
+  const vf = THREE.MathUtils.degToRad(camera.fov) / 2, hf = Math.atan(Math.tan(vf) * camera.aspect), reach = CUP_R + 1.05; // the cups and their name tags
+  const dist = Math.max(reach / Math.tan(hf), (reach * Math.sin(elev) + 1.1) / Math.tan(vf)) + (ATTRACT ? 1.0 : 2.2);
+  camGoal.set(Math.cos(ang) * Math.cos(elev) * dist, Math.sin(elev) * dist, Math.sin(ang) * Math.cos(elev) * dist);
+  if (!camAt.lengthSq()) camAt.copy(camGoal);
+  camAt.lerp(camGoal, Math.min(1, dt * 4));
+  camera.position.copy(camAt); camera.lookAt(0, ATTRACT ? 0.5 : portrait ? -1.2 : -0.7, 0);
+  scene.fog.near = dist * 0.9; scene.fog.far = dist * 2.6;
+}
+/** Colors already in use: other players', and the bots' at the table. */
+function takenColors() {
+  const g = game(), bots = g && seatOf(g, net.sessionId) < 0 ? g.seats.filter((s) => s.b).map((s) => s.c) : [];
+  return new Set([...Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c), ...bots]);
+}
+/** Two people joined at once in one color, or mine is a bot's: pick a free one (the later sessionId moves). */
+function fixColor() {
+  const g = game(), others = Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId);
+  const clash = others.some(([id, p]) => p.c === myColor && id < net.sessionId) || (g && seatOf(g, net.sessionId) < 0 && g.seats.some((s) => s.b && s.c === myColor));
+  if (!clash) return;
+  const taken = takenColors(), free = COLORS.find((c) => !taken.has(c));
+  if (free) { myColor = free; net.me.set("c", free); }
+}
+/** ?attract: nobody to wait for, so my seat (none) is skipped and the camera circles the bots. */
+let last = performance.now(), lastHb = 0, lastHud = 0;
+function frame(now) {
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
+  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); fixColor(); }
+  if (isHost()) hostTick(now); else stopHosting();
+  const g = game();
+  if (g) {
+    if (sentT && sentT === g.id + ":" + g.t && performance.now() - sentAt > 4000) sentT = ""; // an intent lost in a host change: let me act again
+    readMyDice(g); resendDice(g, now); effects(g, now); syncTable(g, now, dt);
+    if (now - lastHud > 100) { lastHud = now; hud(g); }
+  }
+  aimCamera(dt, now);
+  lamp.intensity = 190 * (0.96 + Math.sin(now / 900) * 0.03 + Math.sin(now / 137) * 0.01);
+  renderer.render(scene, camera);
+  drawFx(dt);
+  requestAnimationFrame(frame);
+}
+
+(async function start() {
+  if (ATTRACT) { Object.assign(CONFIG, { rollMs: 650, botMs: [420, 700], revealMs: 2300, overMs: 2500, botDoubt: 0.42 }); $("name").style.display = "none"; }
+  net = await connect();
+  net.onState((st) => { S = st; });
+  for (const type of ["bid", "liar", "again"]) net.on(type, (data, from) => { if (isHost() && data) host.inbox.push({ type, from, data }); });
+  net.on("mydice", (d, from) => { // a player re-sending its dice to me, the new host
+    const g = game(), i = g && d ? seatOf(g, from) : -1;
+    if (i < 0 || d.to !== net.sessionId || d.g !== g.id || d.r !== g.r || host.ready) return;
+    Seal.open(pkOf(from), d.box).then((dice) => { if (Array.isArray(dice)) host.known.set(i, dice); });
+  });
+  net.onDisconnect(() => { dropped = true; $("net").textContent = "Reconnecting…"; });
+  net.onReconnect(() => { dropped = false; });
+  if (!net.offline && typeof MP !== "undefined") board = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl }).leaderboard(CONFIG.board);
+  const taken = takenColors();
+  myColor = COLORS.find((c) => !taken.has(c)) || pick(COLORS);
+  const pk = await Seal.init().catch(() => "");
+  net.me.set({ n: myName, c: myColor, pk, hb: Date.now() });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
