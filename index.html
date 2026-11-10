@@ -828,6 +828,7 @@ function fixColor() {
 /** ?attract: nobody to wait for, so my seat (none) is skipped and the camera circles the bots. */
 let last = performance.now(), lastHb = 0, lastHud = 0;
 function frame(now) {
+  requestAnimationFrame(frame);
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
   if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); fixColor(); }
   if (isHost()) hostTick(now); else stopHosting();
@@ -841,7 +842,6 @@ function frame(now) {
   lamp.intensity = 190 * (0.96 + Math.sin(now / 900) * 0.03 + Math.sin(now / 137) * 0.01);
   renderer.render(scene, camera);
   drawFx(dt);
-  requestAnimationFrame(frame);
 }
 
 (async function start() {
