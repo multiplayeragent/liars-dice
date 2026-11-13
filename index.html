@@ -37,10 +37,10 @@
   .card { width: min(380px, calc(100vw - 32px)); max-height: 90vh; overflow: auto; box-sizing: border-box; padding: 20px; border-radius: 18px; background: #24170f; border: 1px solid #ffffff22; text-align: center; box-shadow: 0 20px 60px #000a; }
   .card h2 { margin: 0; font-size: 28px; } .card p { margin: 4px 0 12px; color: #d9c4a3; }
   .card h3 { margin: 6px 0 4px; font-size: 13px; color: var(--gold); text-align: left; }
-  .card ol { text-align: left; margin: 0 0 14px; padding-left: 24px; font-size: 14px; min-height: 30px; } .card li span { float: right; }
+  .card ol { text-align: left; margin: 0 0 14px; padding-left: 24px; font-size: 14px; min-height: 30px; } .card li.note { list-style: none; margin-left: -24px; opacity: .8; } .card li span { float: right; }
   .card button { width: 100%; min-height: 48px; border-radius: 12px; border: 0; font: 800 16px system-ui, sans-serif; cursor: pointer; background: var(--gold); color: #2b1a00; }
   #oNext { color: #d9c4a3; font-size: 13px; margin-top: 8px; }
-  @media (max-width: 560px) { #faces button img { width: 30px; height: 30px; } .hist { display: none; } #name { width: 96px; } #sub { top: calc(max(12px, env(safe-area-inset-top)) + 84px); } #status { padding-right: 112px; text-align: left; } }
+  @media (max-width: 560px) { #faces button img { width: 30px; height: 30px; } .hist { display: none; } #name { width: 96px; } #sub { top: calc(max(12px, env(safe-area-inset-top)) + 84px); } #status { padding-right: 134px; text-align: left; } }
 </style>
 <script src="https://cdn.multiplayeragent.com/sdk/mp.global.js"></script>
 <script type="importmap">{ "imports": { "three": "./libs/three.module.min.js" } }</script>
@@ -58,7 +58,7 @@
 <canvas id="fx"></canvas>
 <div id="over" hidden><div class="card">
   <h2 id="oTitle"></h2><p id="oSub"></p>
-  <h3>Most wins</h3><ol id="board"><li>Loading…</li></ol>
+  <h3>Most wins</h3><ol id="board"><li class="note">Loading…</li></ol>
   <button id="again">Play again</button><div id="oNext"></div>
 </div></div>
 <script type="module">
@@ -565,8 +565,9 @@ function syncTable(g, now, dt) {
     // the cup: rattling, down, set aside (my own, so I can see my dice), lifted (reveal), or tipped over (out)
     const rattle = ph === "roll" && !out, lifted = ph === "reveal" || ph === "over", peek = me && ph === "bid" && myDice.g === g.id && myDice.r === g.r;
     const side = -Math.PI / 2; // lying on its side, mouth toward the dice
-    const want = out && !lifted ? { x: 0, y: 0.62, z: 0, side, lift: 0 } : lifted ? { x: 0, y: 1.45, z: 0.95, side: 0, lift: 0.7 }
-      : peek ? { x: 1.1 + myDice.d.length * 0.1, y: 0.62, z: 0, side, lift: 0 } : { x: 0, y: 0, z: 0, side: 0, lift: 0 };
+    const aside = { x: 1.1 + (lifted && g.reveal ? g.reveal[i].length : myDice.d.length) * 0.1, y: 0.62, z: 0, side, lift: 0 }; // my cup on its side, right of my dice
+    const want = out && !lifted ? { x: 0, y: 0.62, z: 0, side, lift: 0 } : lifted ? (me ? aside : { x: 0, y: 1.45, z: 0.95, side: 0, lift: 0.7 }) // lifted toward the camera, my own cup would hide my dice
+      : peek ? aside : { x: 0, y: 0, z: 0, side: 0, lift: 0 };
     for (const key of ["x", "y", "z", "side", "lift"]) v.cupPose[key] += (want[key] - v.cupPose[key]) * k;
     const shake = rattle ? Math.sin(now / 38 + i * 2) * 0.1 : 0;
     v.cup.position.set(v.cupPose.x + shake * 0.6, v.cupPose.y + (rattle ? Math.abs(Math.sin(now / 55 + i)) * 0.12 : 0), v.cupPose.z);
@@ -689,11 +690,11 @@ function results(g) {
   $("oSub").textContent = won ? "Last one with dice. Nobody saw through you." : i >= 0 ? "Your cup ran dry this time." : "";
   $("again").hidden = i < 0;
   const list = $("board");
-  if (!board) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
-  list.innerHTML = "<li>Loading…</li>";
+  if (!board) { list.innerHTML = "<li class='note'>Leaderboards need a connection.</li>"; return; }
+  list.innerHTML = "<li class='note'>Loading…</li>";
   (won ? board.submit(1, "inc").catch(() => null) : Promise.resolve()).then(() => board.top(10)).then(({ entries }) => {
-    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score}</span></li>`).join("") : "<li>No wins yet. Be the first.</li>";
-  }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score}</span></li>`).join("") : "<li class='note'>No wins yet. Be the first.</li>";
+  }).catch(() => { list.innerHTML = "<li class='note'>Couldn't load the leaderboard.</li>"; });
 }
 /** Sounds, bubbles and flying dice when something lands in state (effects only: nothing here decides anything). */
 let seenKey = "", seenDice = null, bidPopAt = -1e9, callAt = -1e9;
