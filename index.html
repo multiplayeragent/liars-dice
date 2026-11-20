@@ -856,7 +856,7 @@ function frame(now) {
   net.on("mydice", (d, from) => { // a player re-sending its dice to me, the new host
     const g = game(), i = g && d ? seatOf(g, from) : -1;
     if (i < 0 || d.to !== net.sessionId || d.g !== g.id || d.r !== g.r || host.ready) return;
-    Seal.open(pkOf(from), d.box).then((dice) => { if (Array.isArray(dice)) host.known.set(i, dice); });
+    Seal.open(pkOf(from), d.box).then((dice) => { if (Array.isArray(dice) && dice.every((v) => Number.isInteger(v) && v >= 1 && v <= 6)) host.known.set(i, dice); });
   });
   net.onDisconnect(() => { dropped = true; $("net").textContent = "Reconnecting…"; });
   net.onReconnect(() => { dropped = false; });
